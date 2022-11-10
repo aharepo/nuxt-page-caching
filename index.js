@@ -6,7 +6,11 @@ import getKey from "./lib/getKey";
 
 function isValidResult({ html }) {
   // Nuxt generated valid layout
-  return (html || "").includes('id="webpage-main-content"');
+  const htmlToCheck = html || "";
+  if (htmlToCheck.includes('id="webpage-main-layout"')) {
+    return htmlToCheck.includes('id="webpage-main-content"');
+  }
+  return htmlToCheck.length > 0;
 }
 
 export default function index({
