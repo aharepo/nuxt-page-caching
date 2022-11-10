@@ -4,6 +4,11 @@ import RedisStore from "./lib/RedisStore";
 import { serialize, deserialize } from "./lib/serializer";
 import getKey from "./lib/getKey";
 
+function isValidResult({ html }) {
+  // Nuxt generated valid layout
+  return (html || "").includes('id="webpage-main-content"');
+}
+
 export default function index({
   getCacheData,
   url = "redis://127.0.0.1:6379",
@@ -35,7 +40,7 @@ export default function index({
 
       function renderAndSetCacheKey() {
         return renderRoute(route, context).then(async function (result) {
-          if (!result.error && !result.redirected) {
+          if (isValidResult(result) && !result.error && !result.redirected) {
             const redisKey = getKey({ appendHost, req: context.req, key });
             const value = serialize(result);
             await useRedisStore().write(redisKey, value, expire, true);
@@ -48,10 +53,12 @@ export default function index({
         try {
           const cachedResult = await useRedisStore().read(key, true);
           if (cachedResult && !renewCache) {
-            resolve(deserialize(cachedResult));
-          } else {
-            resolve(renderAndSetCacheKey());
+            const deserialized = deserialize(cachedResult);
+            if (isValidResult(deserialized)) {
+              return resolve(deserialized);
+            }
           }
+          resolve(renderAndSetCacheKey());
         } catch {
           resolve(renderRoute(route, context));
         }
