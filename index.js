@@ -20,6 +20,7 @@ export default function index({
   appendHost = true,
   disable = false,
   ignoreConnectionErrors = false,
+  modifyHtmlBeforeRender,
 }) {
   const { nuxt } = this;
 
@@ -42,6 +43,16 @@ export default function index({
           ignoreConnectionErrors
         );
 
+      const getFinalHtmlToSend = (result) => {
+        const finalHtml = modifyHtmlBeforeRender
+          ? modifyHtmlBeforeRender({
+              cachedObject: result,
+              req: context.req,
+            })
+          : result;
+        return finalHtml;
+      };
+
       function renderAndSetCacheKey() {
         return renderRoute(route, context).then(async function (result) {
           if (isValidResult(result) && !result.error && !result.redirected) {
@@ -49,7 +60,7 @@ export default function index({
             const value = serialize(result);
             await useRedisStore().write(redisKey, value, expire, true);
           }
-          return result;
+          return getFinalHtmlToSend(result);
         });
       }
 
@@ -59,7 +70,7 @@ export default function index({
           if (cachedResult && !renewCache) {
             const deserialized = deserialize(cachedResult);
             if (isValidResult(deserialized)) {
-              return resolve(deserialized);
+              return resolve(getFinalHtmlToSend(deserialized));
             }
           }
           resolve(renderAndSetCacheKey());
