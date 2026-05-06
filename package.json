@@ -1,30 +1,41 @@
 {
   "name": "nuxt-page-caching",
-  "version": "1.0.1",
-  "description": "nuxt page caching and nuxt api cache using redis",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Nuxt 3 page caching using Redis",
+  "main": "index.mjs",
+  "module": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./nuxt3": "./nuxt3.mjs",
+    "./runtime": "./lib/runtime.mjs",
+    "./lib/RedisStore": "./lib/RedisStore.js",
+    "./lib/getKey": "./lib/getKey.js",
+    "./lib/serializer": "./lib/serializer.js"
+  },
   "directories": {
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/thaintp/nuxt-page-caching.git"
   },
   "keywords": [
+    "nuxt3",
     "nuxt",
     "ssr",
     "cache",
     "redis",
-    "universal",
-    "cacheRedis",
-    "prefectCache"
+    "page-cache"
   ],
   "author": "ziaadini",
   "license": "MIT",
   "homepage": "https://github.com/thaintp/nuxt-page-caching#readme",
+  "peerDependencies": {
+    "nuxt": "^3.0.0"
+  },
   "dependencies": {
     "net": "^1.0.2",
     "redis": "^3.0.2",
