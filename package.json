@@ -1,6 +1,6 @@
 {
   "name": "nuxt-page-caching",
-  "version": "2.0.0",
+  "version": "1.0.8",
   "description": "Nuxt 3 page caching using Redis",
   "main": "index.mjs",
   "module": "index.mjs",
@@ -12,6 +12,13 @@
     "./lib/getKey": "./lib/getKey.js",
     "./lib/serializer": "./lib/serializer.js"
   },
+  "files": [
+    "index.mjs",
+    "nuxt3.mjs",
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
   "directories": {
     "lib": "lib"
   },
@@ -37,8 +44,6 @@
     "nuxt": "^3.0.0"
   },
   "dependencies": {
-    "net": "^1.0.2",
-    "redis": "^3.0.2",
-    "tls": "^0.0.1"
+    "redis": "^3.0.2"
   }
 }
