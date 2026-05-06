@@ -36,8 +36,10 @@ test("buildNuxt3RuntimePlugin generates a Nuxt 3 Nitro plugin", () => {
 
   assert.match(code, /createPageCachingHooks/);
   assert.doesNotMatch(code, /#imports/);
-  assert.match(code, /file:\/\/\/pkg\/lib\/runtime\.mjs/);
-  assert.match(code, /file:\/\/\/app\/src\/configs\/pageCache\.runtime\.mjs/);
+  assert.doesNotMatch(code, /file:\/\//);
+  assert.match(code, /"nuxt-page-caching\/runtime"/);
+  assert.match(code, /"nuxt-page-caching\/redis-store"/);
+  assert.match(code, /"@\/configs\/pageCache\.runtime\.mjs"/);
   assert.match(code, /const getCacheData = __getCacheData;/);
   assert.match(
     code,
