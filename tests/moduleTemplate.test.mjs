@@ -7,6 +7,7 @@ const nuxt = {
   options: {
     rootDir: "/app",
     srcDir: "/app/src",
+    buildDir: "/app/.nuxt",
   },
 };
 
@@ -39,7 +40,8 @@ test("buildNuxt3RuntimePlugin generates a Nuxt 3 Nitro plugin", () => {
   assert.doesNotMatch(code, /file:\/\//);
   assert.match(code, /"nuxt-page-caching\/runtime"/);
   assert.match(code, /"nuxt-page-caching\/redis-store"/);
-  assert.match(code, /"@\/configs\/pageCache\.runtime\.mjs"/);
+  assert.match(code, /"\.\.\/\.\.\/src\/configs\/pageCache\.runtime\.mjs"/);
+  assert.doesNotMatch(code, /"@\/configs\/pageCache\.runtime\.mjs"/);
   assert.match(code, /const getCacheData = __getCacheData;/);
   assert.match(
     code,
