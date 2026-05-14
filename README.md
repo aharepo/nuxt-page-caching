@@ -283,12 +283,33 @@ Return shape:
   key: "redis-key",
   expire: 60,
   renewCache: false,
-  url: "redis://runtime-cache:6379"
+  url: "redis://runtime-cache:6379",
+  canonicalUrl: "/clean-route"
 }
 ```
 
 `renewCache: true` skips the cached read, renders fresh HTML, and writes the new
 cache value.
+
+### Canonical URL substitution
+
+Set `canonicalUrl` when your Redis cache key deliberately ignores some request
+query params, but Nuxt's SSR payload still serializes the full request URL into
+`__NUXT_DATA__`.
+
+On a cold render, the module stores the canonical payload in Redis but still
+sends the user's original payload back to that first request. On a cache hit,
+the module substitutes the cached canonical payload path back to the current
+request route before sending the HTML. This keeps Vue Router hydration aligned
+with the browser URL while keeping one shared Redis entry for equivalent routes.
+
+The project owns the canonical policy. The canonical URL should be a clean route
+URL, not a Redis key: no leading `&`, no empty `?`, deterministic query order,
+and only query params that are safe for the cached SSR HTML identity.
+
+The substitution is scoped to Nuxt's root payload `path` field inside
+`__NUXT_DATA__`. It does not rewrite CMS HTML, anchors, canonical links, or
+Open Graph URLs that happen to contain the same string.
 
 ## Cached Shape
 
@@ -303,8 +324,10 @@ Cached values are serialized render response objects with an `html` field:
 }
 ```
 
-`modifyHtmlBeforeRender()` runs before sending cached HTML and after writing a
-fresh SSR response. The raw serialized render object is what gets stored.
+`modifyHtmlBeforeRender()` runs before sending cached HTML and after the fresh
+SSR response is written to Redis. When `canonicalUrl` is provided, Redis stores
+the canonicalized copy while the current request still receives the original
+request-shaped payload.
 
 ## Security
 
