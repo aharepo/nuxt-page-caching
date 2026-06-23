@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import {
+  __test__,
   handleRenderBefore,
   handleRenderResponse,
   serializeNuxtDataPayload,
@@ -82,6 +83,7 @@ function createDeps({
   writeError,
   modifyHtmlBeforeRender,
   operationTimeout,
+  onWrite,
 } = {}) {
   const operations = [];
 
@@ -100,12 +102,13 @@ function createDeps({
     async read(key) {
       operations.push({ action: "read", key });
       if (readError) throw readError;
-      return cachedValue;
+      return typeof cachedValue === "function" ? cachedValue(key) : cachedValue;
     }
 
     async write(key, value, expire) {
       operations.push({ action: "write", key, value, expire });
       if (writeError) throw writeError;
+      if (onWrite) onWrite({ key, value, expire });
       return true;
     }
 
@@ -140,6 +143,10 @@ function createDeps({
   };
 }
 
+test.afterEach(() => {
+  __test__.clearInFlightRenderMap();
+});
+
 test("cache hit returns cached HTML before render", async () => {
   const { deps, operations } = createDeps({
     cachedValue: JSON.stringify({ html: validHtml, headers: { "x-test": "1" } }),
@@ -171,6 +178,59 @@ test("cache miss writes the fresh rendered HTML", async () => {
   assert.equal(write.key, "page-key");
   assert.equal(write.expire, 60);
   assert.equal(JSON.parse(write.value).html, validHtml);
+});
+
+test("concurrent cache miss waits for the first render and then serves its cached result", async () => {
+  let cachedValue = null;
+  const { deps, operations } = createDeps({
+    cachedValue: () => cachedValue,
+    getCacheData: () => ({
+      key: "page-key",
+      expire: 60,
+      canonicalUrl: "/veitingar",
+    }),
+    onWrite({ value }) {
+      cachedValue = value;
+    },
+  });
+  const firstCtx = {
+    event: createEvent("/veitingar?utm_source=fb"),
+    response: undefined,
+  };
+  const secondCtx = {
+    event: createEvent("/veitingar?utm_source=google"),
+    response: undefined,
+  };
+
+  await handleRenderBefore(firstCtx, deps);
+  const secondBefore = handleRenderBefore(secondCtx, deps);
+  let secondResolved = false;
+  secondBefore.then(() => {
+    secondResolved = true;
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(secondResolved, false);
+
+  const firstHtml = createNuxtDataHtml({ path: "/veitingar?utm_source=fb" });
+  await handleRenderResponse({ body: firstHtml, statusCode: 200 }, firstCtx, deps);
+  await secondBefore;
+
+  assert.equal(secondResolved, true);
+  assert.equal(operations.filter((op) => op.action === "write").length, 1);
+  assert.deepEqual(
+    operations.filter((op) => op.action === "read").map((op) => op.key),
+    ["page-key", "page-key", "page-key"]
+  );
+  assert.equal(
+    getPayloadPath(extractNuxtDataPayload(JSON.parse(cachedValue).html)),
+    "/veitingar"
+  );
+  assert.equal(
+    getPayloadPath(extractNuxtDataPayload(secondCtx.response.body)),
+    "/veitingar?utm_source=google"
+  );
 });
 
 test("cacheData url is used as the runtime Redis URL", async () => {
