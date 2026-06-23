@@ -233,6 +233,59 @@ test("concurrent cache miss waits for the first render and then serves its cache
   );
 });
 
+test("debug env logs cache single-flight decisions", async () => {
+  const previousDebugValue = process.env.NUXT_PAGE_CACHE_DEBUG;
+  const originalConsoleInfo = console.info;
+  const infoCalls = [];
+  let cachedValue = null;
+  const { deps } = createDeps({
+    cachedValue: () => cachedValue,
+    getCacheData: () => ({
+      key: "page-key",
+      expire: 60,
+    }),
+    onWrite({ value }) {
+      cachedValue = value;
+    },
+  });
+  const firstCtx = { event: createEvent("/matvorubudin"), response: undefined };
+  const secondCtx = { event: createEvent("/matvorubudin"), response: undefined };
+
+  process.env.NUXT_PAGE_CACHE_DEBUG = "1";
+  console.info = (...args) => {
+    infoCalls.push(args);
+  };
+
+  try {
+    await handleRenderBefore(firstCtx, deps);
+    const secondBefore = handleRenderBefore(secondCtx, deps);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await handleRenderResponse({ body: validHtml, statusCode: 200 }, firstCtx, deps);
+    await secondBefore;
+  } finally {
+    console.info = originalConsoleInfo;
+    if (previousDebugValue === undefined) {
+      delete process.env.NUXT_PAGE_CACHE_DEBUG;
+    } else {
+      process.env.NUXT_PAGE_CACHE_DEBUG = previousDebugValue;
+    }
+  }
+
+  assert.deepEqual(
+    infoCalls.map((call) => call[1]),
+    [
+      "cache miss; rendering",
+      "cache miss; waiting for in-flight render",
+      "cache write",
+      "served from in-flight render cache",
+    ]
+  );
+  assert.deepEqual(
+    infoCalls.map((call) => call[2].route),
+    ["/matvorubudin", "/matvorubudin", "/matvorubudin", "/matvorubudin"]
+  );
+});
+
 test("cacheData url is used as the runtime Redis URL", async () => {
   const { deps, operations } = createDeps({
     getCacheData: () => ({
