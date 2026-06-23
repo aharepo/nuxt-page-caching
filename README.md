@@ -249,6 +249,7 @@ Practical rules:
 | :-- | :-- | :-- | :-- |
 | `disable` | boolean | `false` | Disable page caching. When `nuxt3.useRuntimeConfig` is true, runtime `getCacheData()` may still decide whether to cache. |
 | `appendHost` | boolean | `true` | Append `req.headers.host` to Redis keys through package `getKey()`. |
+| `debug` | boolean/string | `false` | Enable cache decision logs. Also enabled by `NUXT_PAGE_CACHE_DEBUG=1` or `NUXT_PAGE_CACHE_SINGLE_FLIGHT_DEBUG=1`. |
 | `ignoreConnectionErrors` | boolean | `false` | Fall back to normal SSR when Redis read/write fails. |
 | `operationTimeout` | number | `1000` | Redis read/write timeout in milliseconds. Set `0` to disable. |
 | `prefix` | string | `"r-"` | Redis key prefix passed to `RedisStore`. |
@@ -258,8 +259,22 @@ Practical rules:
 | `nuxt3.getCacheData` | string | `undefined` | Runtime import reference: `"path#exportName"`. |
 | `nuxt3.modifyHtmlBeforeRender` | string | `undefined` | Runtime import reference: `"path#exportName"`. |
 | `nuxt3.cacheData` | object | `{}` | Serializable data passed as `context.pageCacheOptions`. |
+| `nuxt3.debug` | boolean/string | `false` | Enable runtime cache decision logs from Nuxt module options. |
 | `nuxt3.useRuntimeConfig` | boolean | `false` | Pass Nitro runtime config as `context.runtimeConfig`. |
 | `nuxt3.useRuntimeRedisUrl` | boolean | `false` | Set generated option `url` to `null` and require `getCacheData()` to return `url`. |
+
+## Debug logging
+
+Set either env var to a truthy value (`1`, `true`, `yes`, or `on`) to inspect
+cache decisions in dev:
+
+```bash
+NUXT_PAGE_CACHE_DEBUG=1
+NUXT_PAGE_CACHE_SINGLE_FLIGHT_DEBUG=1
+```
+
+Debug logs include the route, Redis key, in-flight wait/hit/write decisions, and
+TTL used for writes. They do not print the Redis connection URL.
 
 ## `getCacheData(route, context)`
 
