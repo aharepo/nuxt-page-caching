@@ -333,11 +333,25 @@ Cached values are serialized render response objects with an `html` field:
 ```js
 {
   html: "<!DOCTYPE html>...",
-  body: "<!DOCTYPE html>...",
   statusCode: 200,
   headers: {}
 }
 ```
+
+Redis stores one HTML copy in `html`. Readers still accept older entries with
+`html`, `body`, or both fields. Older Nuxt 3 package readers can also read the
+new `html`-only entries, so rolling upgrades and rollbacks do not require a
+cache flush or a cache-key change.
+
+Both `html` and `body` are available in memory to `modifyHtmlBeforeRender()`
+for compatibility. Response status, headers, expiry, and canonical URL handling
+are unchanged. Request-specific HTML changes are not saved back into Redis.
+
+From a Git checkout with the `v1.1.2` and `v1.1.3` tags available, run
+`npm run test:redis` against a disposable local Redis at port 16389 (or set
+`REDIS_TEST_URL` to another loopback Redis). This checks all nine writer/reader
+combinations across those two versions and the current code, including TTL,
+response metadata, and the HTML hook. The test rejects non-loopback hosts.
 
 `modifyHtmlBeforeRender()` runs before sending cached HTML and after the fresh
 SSR response is written to Redis. When `canonicalUrl` is provided, Redis stores

@@ -180,6 +180,123 @@ test("cache miss writes the fresh rendered HTML", async () => {
   assert.equal(JSON.parse(write.value).html, validHtml);
 });
 
+const responseFormats = [
+  { name: "body only", fields: { body: validHtml } },
+  { name: "html only", fields: { html: validHtml } },
+  { name: "both fields", fields: { html: validHtml, body: validHtml } },
+];
+
+for (const { name, fields } of responseFormats) {
+  test(`cache write stores one HTML copy from ${name} and preserves the hook contract`, async () => {
+    const { deps, operations } = createDeps({
+      modifyHtmlBeforeRender({ cachedObject }) {
+        assert.equal(cachedObject.html, validHtml);
+        assert.equal(cachedObject.body, validHtml);
+        return { ...cachedObject, html: validHtml.replace("ok", "themed") };
+      },
+    });
+    const ctx = { event: createEvent(), response: undefined };
+    const response = {
+      ...fields,
+      statusCode: 203,
+      statusMessage: "Non-Authoritative Information",
+      headers: { "content-type": "text/html", "x-test": "preserved" },
+    };
+
+    await handleRenderBefore(ctx, deps);
+    await handleRenderResponse(response, ctx, deps);
+
+    const write = operations.find((op) => op.action === "write");
+    const stored = JSON.parse(write.value);
+    assert.equal(stored.html, validHtml);
+    assert.equal(Object.hasOwn(stored, "body"), false);
+    assert.equal(stored.statusCode, 203);
+    assert.equal(stored.statusMessage, response.statusMessage);
+    assert.deepEqual(stored.headers, response.headers);
+    assert.equal(write.expire, 60);
+    assert.equal(response.body, validHtml.replace("ok", "themed"));
+    assert.equal(response.html, response.body);
+  });
+
+  test(`cache hit reads ${name} entries and restores both fields for hooks`, async () => {
+    const cachedValue = JSON.stringify({
+      ...fields,
+      statusCode: 203,
+      statusMessage: "Non-Authoritative Information",
+      headers: { "x-test": "preserved" },
+    });
+    const { deps, operations } = createDeps({
+      cachedValue,
+      modifyHtmlBeforeRender({ cachedObject }) {
+        assert.equal(cachedObject.html, validHtml);
+        assert.equal(cachedObject.body, validHtml);
+        return { ...cachedObject, html: cachedObject.html.replace("ok", "themed") };
+      },
+    });
+    const ctx = { event: createEvent(), response: undefined };
+
+    await handleRenderBefore(ctx, deps);
+
+    assert.equal(ctx.response.body, validHtml.replace("ok", "themed"));
+    assert.equal(ctx.response.statusCode, 203);
+    assert.equal(ctx.response.statusMessage, "Non-Authoritative Information");
+    assert.deepEqual(ctx.response.headers, { "x-test": "preserved" });
+    assert.equal(operations.some((op) => op.action === "write"), false);
+    assert.equal(JSON.parse(cachedValue).html, fields.html);
+    assert.equal(JSON.parse(cachedValue).body, fields.body);
+  });
+}
+
+test("large pages serialize once instead of doubling the Redis payload", async () => {
+  const html = `<html><body>${"large-page-content ".repeat(100000)}</body></html>`;
+  const response = { body: html, statusCode: 200 };
+  const { deps, operations } = createDeps();
+  const ctx = { event: createEvent(), response: undefined };
+
+  await handleRenderBefore(ctx, deps);
+  await handleRenderResponse(response, ctx, deps);
+
+  const write = operations.find((op) => op.action === "write");
+  const previousValue = JSON.stringify({ ...JSON.parse(write.value), body: html });
+  assert.ok(Buffer.byteLength(write.value) < Buffer.byteLength(previousValue) * 0.51);
+  assert.equal(JSON.parse(write.value).html, html);
+  assert.equal(response.body, html);
+});
+
+test("single-copy canonical cache round trip keeps request-specific hook changes out of Redis", async () => {
+  const originalRoute = "/veitingar?utm_source=first";
+  const nextRoute = "/veitingar?utm_source=second";
+  let cachedValue;
+  let expectedRoute = originalRoute;
+  let theme = "first-theme";
+  const { deps } = createDeps({
+    cachedValue: () => cachedValue,
+    getCacheData: () => ({ key: "page-key", expire: 60, canonicalUrl: "/veitingar" }),
+    onWrite({ value }) { cachedValue = value; },
+    modifyHtmlBeforeRender({ cachedObject }) {
+      assert.equal(getPayloadPath(extractNuxtDataPayload(cachedObject.html)), expectedRoute);
+      assert.equal(cachedObject.body, cachedObject.html);
+      return { ...cachedObject, html: cachedObject.html.replace("AHA_THEME_COLOR", theme) };
+    },
+  });
+  const firstCtx = { event: createEvent(originalRoute), response: undefined };
+  const response = { body: createNuxtDataHtml({ path: originalRoute, extraBody: "AHA_THEME_COLOR" }), statusCode: 200 };
+  await handleRenderBefore(firstCtx, deps);
+  await handleRenderResponse(response, firstCtx, deps);
+  assert.match(response.body, /first-theme/);
+  assert.equal(Object.hasOwn(JSON.parse(cachedValue), "body"), false);
+  assert.equal(getPayloadPath(extractNuxtDataPayload(JSON.parse(cachedValue).html)), "/veitingar");
+  assert.match(JSON.parse(cachedValue).html, /AHA_THEME_COLOR/);
+
+  expectedRoute = nextRoute;
+  theme = "second-theme";
+  const secondCtx = { event: createEvent(nextRoute), response: undefined };
+  await handleRenderBefore(secondCtx, deps);
+  assert.match(secondCtx.response.body, /second-theme/);
+  assert.doesNotMatch(secondCtx.response.body, /first-theme/);
+  assert.match(JSON.parse(cachedValue).html, /AHA_THEME_COLOR/);
+});
+
 test("concurrent cache miss waits for the first render and then serves its cached result", async () => {
   let cachedValue = null;
   const { deps, operations } = createDeps({
